@@ -1,10 +1,13 @@
-
-// mod parser;
-
 use std::{
-    io::stdin,
-    process::Command
+    io::{stdin, ErrorKind},
+    process::Command,
 };
+
+use crate::parse::parse_command;
+
+mod parse;
+
+const PROMPT: &str = "$ ";
 
 fn main() {
     let mut input = String::new();
@@ -12,23 +15,43 @@ fn main() {
     loop {
         input.truncate(0);
 
-        eprint!("$ ");
+        eprint!("{PROMPT}");
 
         match stdin().read_line(&mut input) {
             Ok(_len) => {
-                if let Err(e) = execute_command(&input) {
-                    eprintln!("Error: {e}");
+                dbg!(&input);
+                match parse_command(&input) {
+                    Ok(command) => {
+                        dbg!(&command);
+                        if let Err(e) = execute_command(&command) {
+                            eprintln!("Error: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing input: {e}")
+                    }
                 }
-            },
-            Err(e) => {eprintln!("Error reading input: {e}")},
+            }
+            Err(e) => {
+                eprintln!("Error reading input: {e}")
+            }
         }
     }
 }
 
-fn execute_command(command: &String) -> std::io::Result<()> {
-    let command = command.trim();
+fn execute_command(command_parts: &[String]) -> std::io::Result<()> {
+    let mut iter = command_parts.iter();
 
-    let _handle = Command::new(command).spawn()?.wait()?;
+    let mut command = Command::new(iter.next().ok_or_else(|| {
+        eprintln!("Error: empty command");
+        ErrorKind::Other
+    })?);
+
+    for arg in iter {
+        command.arg(arg);
+    }
+
+    let _handle = command.spawn()?.wait()?;
 
     Ok(())
 }
