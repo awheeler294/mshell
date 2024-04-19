@@ -1,36 +1,53 @@
-/// Parse a command from the input string. Input string is space seperated (unless
-/// enclosed in quotes), returns a vec of parsed strings. The first string should
-/// be intpreted as the command, all subsequent string as arguments.
-pub fn parse_command(input: &str) -> Result<Vec<String>, String> {
-    let input = input.trim();
+use std::process::Command;
 
-    // let mut count = 0;
-    let mut command = vec![];
+#[derive(Debug, PartialEq)]
+pub struct ParsedCommand {
+    pub command: String,
+    pub args: Vec<String>,
+}
 
-    let mut to_parse = input;
-    let mut iter = to_parse.char_indices();
+impl ParsedCommand {
+    /// Parse a command from the input string. Input string is space seperated (unless
+    /// enclosed in quotes). The first token is intpreted as the command, all
+    /// subsequent tokens as arguments.
+    pub fn parse_command(input: &str) -> Result<Self, String> {
+        let input = input.trim();
 
-    while let Some((idx, ch)) = iter.next() {
-        if ch.is_whitespace() {
-            continue;
+        let mut command_parts = vec![];
+
+        let mut to_parse = input;
+        let mut iter = to_parse.char_indices();
+
+        while let Some((idx, ch)) = iter.next() {
+            if ch.is_whitespace() {
+                continue;
+            }
+
+            let (remaining, parsed) = parse_space_seperated_chunk(&to_parse[idx..])?;
+
+            to_parse = remaining;
+            iter = to_parse.char_indices();
+
+            command_parts.push(parsed);
         }
 
-        let (remaining, parsed) = parse_space_seperated_chunk(&to_parse[idx..])?;
-        // dbg!(&parsed);
-        // dbg!(&remaining);
+        let mut iter = command_parts.into_iter();
 
-        to_parse = remaining;
-        iter = to_parse.char_indices();
+        let command = iter.next().ok_or_else(|| "Error: empty command")?;
+        let args = iter.collect();
 
-        command.push(parsed);
-
-        // count += 1;
-        // if count > 2 {
-        //     break;
-        // }
+        Ok(Self { command, args })
     }
 
-    Ok(command)
+    // Converts the parsed command into a std::process::Command. Consumes self.
+    pub fn to_command(self) -> Command {
+        let mut command = Command::new(self.command);
+        for arg in self.args {
+            command.arg(arg);
+        }
+
+        command
+    }
 }
 
 /// Parse the first space-seperated chunk of the input. If a section is in quotes, spaces
@@ -38,19 +55,22 @@ pub fn parse_command(input: &str) -> Result<Vec<String>, String> {
 /// unparsed input and parsed chunk
 fn parse_space_seperated_chunk(input: &str) -> Result<(&str, String), String> {
     let mut acc = String::new();
-    let mut iter = input.char_indices();
+
+    let mut to_parse = input;
+    let mut iter = to_parse.char_indices();
 
     while let Some((idx, ch)) = iter.next() {
         if ch.is_whitespace() {
-            return Ok((&input[idx..], acc));
+            return Ok((&to_parse[idx..], acc));
         }
 
         if ch == '"' || ch == '\'' {
-            let (remaining, parsed) = parse_quoted(&input[idx..])?;
+            let (remaining, parsed) = parse_quoted(&to_parse[idx..])?;
+            to_parse = remaining;
 
             acc += parsed;
 
-            iter = remaining.char_indices();
+            iter = to_parse.char_indices();
         } else {
             acc.push(ch);
         }
@@ -92,40 +112,60 @@ mod test {
     #[test]
     fn test_parse_command() {
         for (input, expected) in [
-            (r#"ls"#, Ok(vec![String::from("ls")])),
+            (
+                r#"ls"#,
+                ParsedCommand {
+                    command: String::from("ls"),
+                    args: vec![],
+                },
+            ),
             (
                 r#"ls -lha"#,
-                Ok(vec![String::from("ls"), String::from("-lha")]),
+                ParsedCommand {
+                    command: String::from("ls"),
+                    args: vec![String::from("-lha")],
+                },
             ),
             (
                 r#"ls -lha /sys"#,
-                Ok(vec![
-                    String::from("ls"),
-                    String::from("-lha"),
-                    String::from("/sys"),
-                ]),
+                ParsedCommand {
+                    command: String::from("ls"),
+                    args: vec![String::from("-lha"), String::from("/sys")],
+                },
             ),
             (
                 r#"echo  extra   spaces  will    be    removed"#,
-                Ok(vec![
-                    String::from("echo"),
-                    String::from("extra"),
-                    String::from("spaces"),
-                    String::from("will"),
-                    String::from("be"),
-                    String::from("removed"),
-                ]),
+                ParsedCommand {
+                    command: String::from("echo"),
+                    args: vec![
+                        String::from("extra"),
+                        String::from("spaces"),
+                        String::from("will"),
+                        String::from("be"),
+                        String::from("removed"),
+                    ],
+                },
             ),
             (
                 "echo \"but   not  if    they're    in    quotes\"\n",
                 // echo "but   not  if    they're    in    quotes"
-                Ok(vec![
-                    String::from("echo"),
-                    String::from("but   not  if    they're    in    quotes"),
-                ]),
+                ParsedCommand {
+                    command: String::from("echo"),
+                    args: vec![String::from("but   not  if    they're    in    quotes")],
+                },
+            ),
+            (
+                r#"/usr/bin/printf "The cat's name is %s.\n" 'Theodore Roosevelt'"#,
+                ParsedCommand {
+                    command: String::from("/usr/bin/printf"),
+                    args: vec![
+                        String::from(r#"The cat's name is %s.\n"#),
+                        String::from(r#"Theodore Roosevelt"#),
+                    ],
+                },
             ),
         ] {
-            let actual = parse_command(input);
+            let actual = ParsedCommand::parse_command(input).unwrap();
             assert_eq!(
                 actual, expected,
                 "got left when expecting right from input `{input:?}`"
