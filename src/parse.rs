@@ -1,5 +1,5 @@
 /// Parse a command from the input string. Input string is space seperated (unless
-/// enclosed in quotes), returns a vec of parsed strings. The first string should 
+/// enclosed in quotes), returns a vec of parsed strings. The first string should
 /// be intpreted as the command, all subsequent string as arguments.
 pub fn parse_command(input: &str) -> Result<Vec<String>, String> {
     let input = input.trim();
@@ -34,7 +34,7 @@ pub fn parse_command(input: &str) -> Result<Vec<String>, String> {
 }
 
 /// Parse the first space-seperated chunk of the input. If a section is in quotes, spaces
-/// inside the should not be treated as seperators. Return tuple of remaining 
+/// inside the should not be treated as seperators. Return tuple of remaining
 /// unparsed input and parsed chunk
 fn parse_space_seperated_chunk(input: &str) -> Result<(&str, String), String> {
     let mut acc = String::new();

@@ -1,6 +1,7 @@
 use std::{
+    env::set_current_dir,
     io::{stdin, ErrorKind},
-    process::Command,
+    process::{Command, ExitStatus},
 };
 
 use crate::parse::parse_command;
@@ -18,13 +19,43 @@ fn main() {
         eprint!("{PROMPT}");
 
         match stdin().read_line(&mut input) {
-            Ok(_len) => {
-                dbg!(&input);
+            Ok(len) => {
+                // handle EOF signal
+                if len == 0 {
+                    break;
+                }
+
                 match parse_command(&input) {
                     Ok(command) => {
-                        dbg!(&command);
-                        if let Err(e) = execute_command(&command) {
-                            eprintln!("Error: {e}");
+                        if let Some(command_name) = command.get(0) {
+                            match command_name.as_str() {
+                                // shell builtins
+                                "cd" => {
+                                    let new_working_dir = match command.get(1) {
+                                        Some(path) => path,
+                                        None => ".",
+                                    };
+                                    if let Err(e) = set_current_dir(new_working_dir) {
+                                        eprintln!("Error changing directories: {e}");
+                                    }
+                                }
+
+                                "exit" => {
+                                    break;
+                                }
+
+                                // execute external command
+                                _ => match execute_command(&command) {
+                                    Ok(exit_status) => {
+                                        if exit_status.success() == false {
+                                            eprintln!("Error: command exited with {exit_status}");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Error: {e}");
+                                    }
+                                },
+                            };
                         }
                     }
                     Err(e) => {
@@ -39,7 +70,7 @@ fn main() {
     }
 }
 
-fn execute_command(command_parts: &[String]) -> std::io::Result<()> {
+fn execute_command(command_parts: &[String]) -> std::io::Result<ExitStatus> {
     let mut iter = command_parts.iter();
 
     let mut command = Command::new(iter.next().ok_or_else(|| {
@@ -51,7 +82,9 @@ fn execute_command(command_parts: &[String]) -> std::io::Result<()> {
         command.arg(arg);
     }
 
-    let _handle = command.spawn()?.wait()?;
+    let exit_status = command.spawn()?.wait()?;
 
-    Ok(())
+    Ok(exit_status)
 }
+
+
