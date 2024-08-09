@@ -1,6 +1,13 @@
 use std::process::Command;
 
 #[derive(Debug, PartialEq)]
+pub enum ParserError {
+    EmptyCommand,
+    MismatchedQuotes(String),
+    Custom(String),
+}
+
+#[derive(Debug, PartialEq)]
 pub struct ParsedCommand {
     pub command: String,
     pub args: Vec<String>,
@@ -10,7 +17,7 @@ impl ParsedCommand {
     /// Parse a command from the input string. Input string is space seperated (unless
     /// enclosed in quotes). The first token is intpreted as the command, all
     /// subsequent tokens as arguments.
-    pub fn parse_command(input: &str) -> Result<Self, String> {
+    pub fn parse_command(input: &str) -> Result<Self, ParserError> {
         let input = input.trim();
 
         let mut command_parts = vec![];
@@ -33,7 +40,7 @@ impl ParsedCommand {
 
         let mut iter = command_parts.into_iter();
 
-        let command = iter.next().ok_or_else(|| "Error: empty command")?;
+        let command = iter.next().ok_or_else(|| ParserError::EmptyCommand)?;
         let args = iter.collect();
 
         Ok(Self { command, args })
@@ -53,7 +60,7 @@ impl ParsedCommand {
 /// Parse the first space-seperated chunk of the input. If a section is in quotes, spaces
 /// inside the should not be treated as seperators. Return tuple of remaining
 /// unparsed input and parsed chunk
-fn parse_space_seperated_chunk(input: &str) -> Result<(&str, String), String> {
+fn parse_space_seperated_chunk(input: &str) -> Result<(&str, String), ParserError> {
     let mut acc = String::new();
 
     let mut to_parse = input;
@@ -82,14 +89,14 @@ fn parse_space_seperated_chunk(input: &str) -> Result<(&str, String), String> {
 /// Attempt to parse the first quoted string from a &str.  Returns Err if input is empty or
 /// if the first character of the input is not `"` or `'`, or no matching quote
 /// is found. Returns tuple of remaining unparsed input, and parsed string EXCLUDING quotes.
-fn parse_quoted(input: &str) -> Result<(&str, &str), String> {
+fn parse_quoted(input: &str) -> Result<(&str, &str), ParserError> {
     let mut chars = input.char_indices();
     let (_idx, quote) = chars.next().ok_or_else(|| {
-        format!("expected quote, found nothing at position 0 when trying to parse a quoted string")
+        ParserError::Custom(format!("expected quote, found nothing at position 0 when trying to parse a quoted string"))
     })?;
 
     if quote != '"' && quote != '\'' {
-        return Err(format!("Expected a single or double quote, found {quote} at position 0 when trying to parse a quoted string"));
+        return Err(ParserError::MismatchedQuotes(format!("Expected a single or double quote, found {quote} at position 0 when trying to parse a quoted string")));
     }
 
     while let Some((idx, ch)) = chars.next() {
@@ -100,9 +107,9 @@ fn parse_quoted(input: &str) -> Result<(&str, &str), String> {
         }
     }
 
-    Err(format!(
+    Err(ParserError::MismatchedQuotes(format!(
         "could not find closing quotes when trying to parse `{input}`, expected `{quote}`"
-    ))
+    )))
 }
 
 #[cfg(test)]

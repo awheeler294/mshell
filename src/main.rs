@@ -53,7 +53,7 @@ fn main() {
                         };
                     }
                     Err(e) => {
-                        eprintln!("Error parsing input: {e}")
+                        eprintln!("Error parsing input: {e:?}")
                     }
                 }
             }
@@ -64,8 +64,9 @@ fn main() {
     }
 }
 
-/// Helper function to execute a command and wait on the results. Returns Err if
-/// the command failed to execute. Return Ok(ExitStatus) after command successfully completes
+/// Helper function to execute a command and wait on the results.
+/// Returns Ok(ExitStatus) after command successfully completes or 
+/// Err if the command failed to execute. 
 fn execute_external_command(parsed: ParsedCommand) -> std::io::Result<ExitStatus> {
     let mut command = parsed.to_command();
 
